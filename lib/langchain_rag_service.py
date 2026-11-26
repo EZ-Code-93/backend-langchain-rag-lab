@@ -19,7 +19,8 @@ def build_chat_model():
 
     # TODO: Import ChatOllama from langchain_ollama.
     # TODO: Return ChatOllama(model=CHAT_MODEL, temperature=0).
-    raise NotImplementedError("Build the ChatOllama model wrapper.")
+    from langchain_ollama import ChatOllama
+    return ChatOllama(model=CHAT_MODEL, temperature=0)
 
 
 def build_chain():
@@ -31,7 +32,12 @@ def build_chain():
     # prompt_template = build_rag_prompt()
     # llm = build_chat_model()
     # return prompt_template | llm | StrOutputParser()
-    raise NotImplementedError("Build the LangChain runnable sequence.")
+    from langchain_core.output_parsers import StrOutputParser
+    from lib.prompt_templates import build_rag_prompt
+
+    prompt_template = build_rag_prompt()
+    llm = build_chat_model()
+    return prompt_template | llm | StrOutputParser()
 
 
 def has_usable_context(scored_documents):
@@ -39,7 +45,10 @@ def has_usable_context(scored_documents):
 
     # TODO: Return False for an empty list.
     # TODO: Return True only if at least one document has non-blank page_content.
-    raise NotImplementedError("Check whether retrieved context is usable.")
+    for doc, distance in scored_documents:
+        if doc.page_content and doc.page_content.strip():
+            return True
+    return False
 
 
 def format_context(scored_documents):
@@ -47,7 +56,29 @@ def format_context(scored_documents):
 
     # TODO: Build a readable context block for each retrieved document.
     # Include source_id, title, category, section, chunk_id, distance, and text.
-    raise NotImplementedError("Format retrieved documents into prompt context.")
+    context_blocks = []
+
+    for index, (document, distance) in enumerate(scored_documents, start=1):
+        metadata = document.metadata or {}
+
+        context_blocks.append(
+            "\n".join(
+                [
+                    f"[Context {index}]",
+                    f"Source ID: {metadata.get('source_id', 'unknown')}",
+                    f"Title: {metadata.get('title', 'Untitled')}",
+                    f"Category: {metadata.get('category', 'Uncategorized')}",
+                    f"Section: {metadata.get('section', 'Unspecified')}",
+                    f"Chunk ID: {metadata.get('chunk_id', 'unknown')}",
+                    f"Distance: {float(distance):.4f}",
+                    "Text:",
+                    document.page_content.strip(),
+                ]
+            )
+        )
+
+    return "\n\n".join(context_blocks)
+
 
 
 def answer_question(
@@ -69,4 +100,49 @@ def answer_question(
     # TODO: Format sources and LangChain debug metadata.
     # TODO: Return the success response.
     # TODO: Wrap unexpected exceptions in LangChainServiceError.
-    raise NotImplementedError("Run the LangChain RAG service.")
+    cleaned_question = question.strip()
+
+    try:
+        scored_documents = retrieve_context(
+            cleaned_question,
+            vector_store=vector_store,
+            top_k=top_k,
+        )
+
+        if not has_usable_context(scored_documents):
+            debug = format_langchain_debug(
+                scored_documents=[],
+                context="",
+                top_k=top_k,
+                fallback=True,
+            )
+            return format_fallback_response(debug)
+
+        context = format_context(scored_documents)
+        rag_chain = chain or build_chain()
+
+        answer = rag_chain.invoke(
+            {
+                "context": context,
+                "question": cleaned_question,
+            }
+        )
+
+        if not isinstance(answer, str) or not answer.strip():
+            raise LangChainServiceError("The LangChain pipeline returned an empty answer.")
+
+        sources = format_sources(scored_documents)
+        debug = format_langchain_debug(
+            scored_documents=scored_documents,
+            context=context,
+            top_k=top_k,
+            fallback=False,
+        )
+
+        return format_success_response(answer, sources, debug)
+
+    except LangChainServiceError:
+        raise
+    except Exception as exc:
+        raise LangChainServiceError(str(exc)) from exc
+
