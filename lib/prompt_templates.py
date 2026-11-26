@@ -19,4 +19,17 @@ def build_rag_prompt():
     # TODO: Return a ChatPromptTemplate with:
     # - a system message containing SYSTEM_PROMPT
     # - a human message that includes both {context} and {question}
-    raise NotImplementedError("Build and return a ChatPromptTemplate.")
+    from langchain_core.prompts import ChatPromptTemplate
+    return ChatPromptTemplate.from_messages(
+        [
+            ("system", SYSTEM_PROMPT),
+            ("human", """Approved context: {context}
+                         Engineer question: {question}
+                         
+                         Response requirements:
+                         - Answer in 2-4 concise sentences
+                         - Base the answer only on the approved context
+                         - Do not invent information not present in the context
+                         """),
+        ]
+    )
