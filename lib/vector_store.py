@@ -13,7 +13,8 @@ def build_embeddings():
 
     # TODO: Import OllamaEmbeddings from langchain_ollama.
     # TODO: Return OllamaEmbeddings(model=EMBEDDING_MODEL).
-    raise NotImplementedError("Build Ollama embeddings.")
+    from langchain_ollama import OllamaEmbeddings
+    return OllamaEmbeddings(model=EMBEDDING_MODEL)
 
 
 def build_vector_store():
@@ -24,7 +25,12 @@ def build_vector_store():
     # - collection_name=COLLECTION_NAME
     # - persist_directory=CHROMA_PATH
     # - embedding_function=build_embeddings()
-    raise NotImplementedError("Build the Chroma vector store.")
+    from langchain_chroma import Chroma
+    return Chroma(
+        collection_name=COLLECTION_NAME,
+        persist_directory=CHROMA_PATH,
+        embedding_function=build_embeddings(),
+    )
 
 
 def retrieve_context(question, *, vector_store=None, top_k=DEFAULT_TOP_K):
@@ -33,4 +39,8 @@ def retrieve_context(question, *, vector_store=None, top_k=DEFAULT_TOP_K):
     # TODO: Reject blank questions.
     # TODO: Use the provided vector_store or build_vector_store().
     # TODO: Call similarity_search_with_score(question, k=top_k).
-    raise NotImplementedError("Retrieve context from the vector store.")
+    if question is None or question.strip() == "":
+        raise ValueError("Question cannot be blank.")
+
+    vector_store = vector_store or build_vector_store()
+    return vector_store.similarity_search_with_score(question, k=top_k)
