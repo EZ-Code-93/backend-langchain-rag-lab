@@ -22,7 +22,25 @@ def create_app():
         # TODO: Call answer_question(question) for valid requests.
         # TODO: Return successful responses as JSON with HTTP 200.
         # TODO: Convert LangChainServiceError into a structured HTTP 502 response.
-        raise NotImplementedError("Complete the POST /api/ask route.")
+        question, error = validate_question_payload(request.get_json(silent=True))
+
+        if error:
+            return jsonify(format_error_response(error["error"], error["message"])), 400
+
+        try:
+            response = answer_question(question)
+            return jsonify(response), 200
+        except LangChainServiceError as exc:
+            return (
+                jsonify(
+                    format_error_response(
+                        "langchain_service_error",
+                        str(exc),
+                    )
+                ),
+                502,
+            )
+
 
     return app
 
